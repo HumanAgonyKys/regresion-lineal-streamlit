@@ -1,86 +1,74 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from io import BytesIO
+import plotly.express as px
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
 
-st.set_page_config(page_title="Regresión lineal simple", page_icon="📈", layout="centered")
+# Configuración de la app
+st.set_page_config(page_title="K-Means con PCA y Comparativa", layout="wide")
+st.title("🎯 Clustering Interactivo con K-Means y PCA (Comparación Antes/Después)")
+st.write("""
+Sube tus datos, aplica **K-Means**, y observa cómo el algoritmo agrupa los puntos en un espacio reducido con **PCA (2D o 3D)**.  
+También puedes comparar la distribución **antes y después** del clustering.
+""")
 
-st.title("Regresión lineal simple")
-
-# 1) Cargar datos
-st.header("1 Cargar datos")
-uploaded_file = st.file_uploader("Sube un archivo CSV con tus datos", type=["csv"])
+# --- Subir archivo ---
+st.sidebar.header("📂 Subir datos")
+uploaded_file = st.sidebar.file_uploader("Selecciona tu archivo CSV", type=["csv"])
 
 if uploaded_file is not None:
-    try:
-        df = pd.read_csv(uploaded_file)
-    except Exception as e:
-        st.error(f"No se pudo leer el CSV: {e}")
-        st.stop()
+    data = pd.read_csv(uploaded_file)
+    st.success("✅ Archivo cargado correctamente.")
+    st.write("### Vista previa de los datos:")
+    st.dataframe(data.head())
 
-    st.write("Vista previa de los datos:")
-    st.dataframe(df.head())
+    # Filtrar columnas numéricas
+    numeric_cols = data.select_dtypes(include=['float64', 'int64']).columns.tolist()
 
-    # columnas numéricas
-    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     if len(numeric_cols) < 2:
-        st.error("Se requieren al menos 2 columnas numéricas (X e Y).")
-        st.stop()
+        st.warning("⚠️ El archivo debe contener al menos dos columnas numéricas.")
+    else:
+        st.sidebar.header("⚙️ Configuración del modelo")
 
-    x_col = st.selectbox("Selecciona la variable independiente (X)", numeric_cols, index=0)
-    y_col = st.selectbox("Selecciona la variable dependiente (Y)", [c for c in numeric_cols if c != x_col], index=0)
+        # Seleccionar columnas a usar
+        selected_cols = st.sidebar.multiselect(
+            "Selecciona las columnas numéricas para el clustering:",
+            numeric_cols,
+            default=numeric_cols
+        )
 
-    # Entrenar modelo
-    X = df[[x_col]].values
-    y = df[y_col].values
+        # Parámetros de clustering
 
-    model = LinearRegression()
-    model.fit(X, y)
+        # --- Datos y modelo ---
 
-    y_pred = model.predict(X)
-    r2 = r2_score(y, y_pred)
+        # --- PCA ---
+        pca = PCA(n_components=n_components)
 
-    st.success("Modelo entrenado correctamente")
+        # --- Visualización antes del clustering ---
+        st.subheader("📊 Distribución original (antes de K-Means)")
+        # --- Visualización después del clustering ---
+        st.subheader(f"🎯 Datos agrupados con K-Means (k = {k})")
+        # --- Centroides ---
+        st.subheader("📍 Centroides de los clusters (en espacio PCA)")
+        centroides_pca = pd.DataFrame(pca.transform(kmeans.cluster_centers_), columns=pca_cols)
+        st.dataframe(centroides_pca)
 
-    #  Ecuación del modelo (en LaTeX)
-    b1 = float(model.coef_[0])
-    b0 = float(model.intercept_)
-    st.subheader("Ecuación del modelo:")
-    st.latex(rf"Y = {b1:0.2f}\, X + {b0:0.2f}")
+        # --- Método del Codo ---
+        st.subheader("📉 Método del Codo (Elbow Method)")
 
-    #  Mostrar R^2
-    st.subheader("Mostrar el R^2")
-    st.write("Coeficiente de determinación (R²):")
-    st.markdown(f"**{r2:0.4f}**")
-    st.write(f"El valor de R² es: **{r2:0.4f}**")
-    st.latex(rf"R^2 = {r2:0.4f}")
+        # --- Descarga de resultados ---
+        st.subheader("💾 Descargar datos con clusters asignados")
 
-    # 2) Predicción
-    st.header("2 Realiza una predicción")
-    x_new = st.number_input(f"Introduce un valor para {x_col}:", value=float(np.nan if df[x_col].isna().all() else round(df[x_col].median(),2)))
-    if st.button("Predecir"):
-        y_hat = model.predict(np.array([[x_new]], dtype=float))[0]
-        st.markdown(f"🔹 **Predicción para {x_col} = {x_new}: {y_hat:0.2f}**")
-
-    # 3) Visualización
-    st.header("3 Visualización del modelo")
-    fig, ax = plt.subplots(figsize=(7,4))
-    # datos reales
-    ax.scatter(df[x_col], df[y_col], label="Datos reales", alpha=0.8)
-    # línea de regresión
-    x_line = np.linspace(df[x_col].min(), df[x_col].max(), 200).reshape(-1,1)
-    y_line = model.predict(x_line)
-    ax.plot(x_line, y_line, label="Línea de regresión")
-    # punto de predicción, si se ha presionado
-    if "y_hat" in locals():
-        ax.scatter([x_new], [y_hat], s=100, marker="o", label="Predicción")
-    ax.set_xlabel(x_col)
-    ax.set_ylabel(y_col)
-    ax.set_title("Visualización del modelo")
-    ax.legend()
-    st.pyplot(fig)
 else:
-    st.info("Sube un CSV para continuar. Ejemplo de columnas: `horas, calificacion`.")
+    st.info("👈 Carga un archivo CSV en la barra lateral para comenzar.")
+    st.write("""
+    **Ejemplo de formato:**
+    | Ingreso_Anual | Gasto_Tienda | Edad |
+    |----------------|--------------|------|
+    | 45000 | 350 | 28 |
+    | 72000 | 680 | 35 |
+    | 28000 | 210 | 22 |
+    """)
