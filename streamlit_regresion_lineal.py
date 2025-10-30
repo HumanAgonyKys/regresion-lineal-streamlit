@@ -1,74 +1,67 @@
-import streamlit as st
+#refactorizado para que pueda funcionar con streamlit
+#el archivo original esta en main
 import pandas as pd
-import numpy as np
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from io import BytesIO
-import plotly.express as px
 import matplotlib.pyplot as plt
+import streamlit as st
 
-# Configuración de la app
-st.set_page_config(page_title="K-Means con PCA y Comparativa", layout="wide")
-st.title("🎯 Clustering Interactivo con K-Means y PCA (Comparación Antes/Después)")
-st.write("""
-Sube tus datos, aplica **K-Means**, y observa cómo el algoritmo agrupa los puntos en un espacio reducido con **PCA (2D o 3D)**.  
-También puedes comparar la distribución **antes y después** del clustering.
-""")
+st.title("Aprendizaje no supervizado: k-means")
+st.subheader("By Oziel Velazquez ITC")
+st.subheader("cargar datos")
 
-# --- Subir archivo ---
-st.sidebar.header("📂 Subir datos")
-uploaded_file = st.sidebar.file_uploader("Selecciona tu archivo CSV", type=["csv"])
+uploaded_file = st.file_uploader("Sube un archivo CSV con tus datos", type=["csv"])
 
 if uploaded_file is not None:
-    data = pd.read_csv(uploaded_file)
-    st.success("✅ Archivo cargado correctamente.")
-    st.write("### Vista previa de los datos:")
-    st.dataframe(data.head())
+    df = pd.read_csv(uploaded_file)
 
-    # Filtrar columnas numéricas
-    numeric_cols = data.select_dtypes(include=['float64', 'int64']).columns.tolist()
+    st.subheader("Datos")
+    st.dataframe(df.head())
 
-    if len(numeric_cols) < 2:
-        st.warning("⚠️ El archivo debe contener al menos dos columnas numéricas.")
-    else:
-        st.sidebar.header("⚙️ Configuración del modelo")
+    escalador = MinMaxScaler().fit(df.values)
+    df_normalizado = pd.DataFrame(escalador.transform(df.values), columns=["Saldo", "transacciones"])
 
-        # Seleccionar columnas a usar
-        selected_cols = st.sidebar.multiselect(
-            "Selecciona las columnas numéricas para el clustering:",
-            numeric_cols,
-            default=numeric_cols
-        )
+    st.dataframe(df_normalizado)
 
-        # Parámetros de clustering
+    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10).fit(df_normalizado.values)
 
-        # --- Datos y modelo ---
+    df_normalizado["cluster"] = kmeans.labels_
 
-        # --- PCA ---
-        pca = PCA(n_components=n_components)
+    st.write(f"{kmeans.cluster_centers_}")
+    st.write(f"{kmeans.inertia_}")
 
-        # --- Visualización antes del clustering ---
-        st.subheader("📊 Distribución original (antes de K-Means)")
-        # --- Visualización después del clustering ---
-        st.subheader(f"🎯 Datos agrupados con K-Means (k = {k})")
-        # --- Centroides ---
-        st.subheader("📍 Centroides de los clusters (en espacio PCA)")
-        centroides_pca = pd.DataFrame(pca.transform(kmeans.cluster_centers_), columns=pca_cols)
-        st.dataframe(centroides_pca)
+    fig1, ax1 = plt.subplots(figsize=(8, 6), dpi=100)
+    colores = ["red", "blue", "orange", "black", "purple", "pink", "brown"]
 
-        # --- Método del Codo ---
-        st.subheader("📉 Método del Codo (Elbow Method)")
+    for cluster in range(kmeans.n_clusters):
+        ax1.scatter(df_normalizado[df_normalizado["cluster"] == cluster]["Saldo"],
+                    df_normalizado[df_normalizado["cluster"] == cluster]["transacciones"],
+                    marker="o", s=180, color=colores[cluster], alpha=0.5)
+        ax1.scatter(kmeans.cluster_centers_[cluster][0],
+                    kmeans.cluster_centers_[cluster][1],
+                    marker="P", s=280, color=colores[cluster])
 
-        # --- Descarga de resultados ---
-        st.subheader("💾 Descargar datos con clusters asignados")
+    ax1.set_title("clientes", fontsize=20)
+    ax1.set_xlabel("saldo en cuenta de ahorros", fontsize=15)
+    ax1.set_ylabel("veces que uso tarjeta de credito", fontsize=15)
+    ax1.text(1.15, 0.2, "k=%i" % kmeans.n_clusters, fontsize=15)
+    ax1.text(1.15, 0, "Inercia = %0.2f" % kmeans.inertia_, fontsize=15)
+    ax1.set_xlim(-0.1, 1.15)
+    ax1.set_ylim(-0.1, 1.15)
+    plt.tight_layout()
+    st.pyplot(fig1)
 
+
+    inercias = []
+    for k in range(2, 10):
+        kmeans_temp = KMeans(n_clusters=k).fit(df_normalizado[["Saldo", "transacciones"]].values)
+        inercias.append(kmeans_temp.inertia_)
+
+    fig2, ax2 = plt.subplots(figsize=(8, 6), dpi=100)
+    ax2.scatter(range(2, 10), inercias, marker="o", s=180, color="purple")
+    ax2.set_xlabel("numero de clusters", fontsize=25)
+    ax2.set_ylabel("inercia", fontsize=25)
+    plt.tight_layout()
+    st.pyplot(fig2)
 else:
-    st.info("👈 Carga un archivo CSV en la barra lateral para comenzar.")
-    st.write("""
-    **Ejemplo de formato:**
-    | Ingreso_Anual | Gasto_Tienda | Edad |
-    |----------------|--------------|------|
-    | 45000 | 350 | 28 |
-    | 72000 | 680 | 35 |
-    | 28000 | 210 | 22 |
-    """)
+    st.info("Por favor, sube un archivo CSV para comenzar el análisis")
